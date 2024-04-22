@@ -1,0 +1,364 @@
+---
+title: "Patents report"
+date: today
+date-format: "DD MMMM YYYY"
+format: 
+  dashboard: 
+    logo: images/rais_logo_white.png
+theme: [darkly, theme.scss]
+execute: 
+  echo: false
+  warning: false
+---
+
+```{r}
+#| label: load-packages
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(DT, farver, glue, ggpubr, ggrepel, here, janitor, scales, tidyverse, viridis)
+```
+
+```{r}
+#| label: set-params
+
+DATA_DATE <- "2024_04_10"
+DATA_DATE_TEXT <- format(as.Date.character(DATA_DATE, "%Y_%m_%d"), "%d %B %Y")
+MIN_YEAR <- 2014
+MAX_YEAR <- 2024
+```
+
+```{r}
+#| label: load-data
+
+citations <- read_csv(here("data", paste0(DATA_DATE, "_times_cited.csv")),
+  show_col_types = FALSE
+)
+details <- read_csv(here("data", paste0(DATA_DATE, "_details.csv")),
+  show_col_types = FALSE
+)
+status <- read_csv(here("data", paste0(DATA_DATE, "_status.csv")),
+  show_col_types = FALSE
+)
+for_2020 <- read_csv(here("data", paste0(DATA_DATE, "_for_2020.csv")),
+  show_col_types = FALSE
+)
+assignees <- read_csv(here("data", paste0(DATA_DATE, "_original_assignees.csv")),
+  show_col_types = FALSE
+)
+```
+
+```{r}
+#| label: set-function
+
+group_tally <- function(data, name = "n", ...) {
+  data |>
+    group_by(...) |>
+    tally(n = {{ name }}) |>
+    ungroup()
+}
+```
+
+# {.sidebar}
+
+This dashboard presents an overview of patents published by researchers at the University of Bradford from `r MIN_YEAR` to `r MAX_YEAR`.
+
+------------------------
+Data was collected from [Dimensions](https://app.dimensions.ai/discover/publication) on `r DATA_DATE_TEXT`.
+
+------------------------
+::: {.callout-note collapse="true"}
+## Research metrics
+
+Put some text in here about responsible research metrics
+
+![](images/Dorabadge1_white_background.png)
+
+:::
+
+# Overview
+
+## Row {height=25%}
+```{r}
+#| content: valuebox
+#| title: 'Patent filings'
+
+patent_applications <- n_distinct(status$patent_id)
+
+list(
+  icon = 'file-text',
+  color = 'primary',
+  value = patent_applications
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: 'Granted patents'
+
+granted_patents <- status %>% 
+  filter(legal_status == "Granted") %>% dim()
+
+list(
+  icon = 'file-check',
+  color = 'success',
+  value = granted_patents[1]
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: 'Active patents'
+
+active_patents <- status %>% 
+  filter(legal_status == "Active") %>% dim()
+
+list(
+  icon = 'file-arrow-up',
+  color = 'info',
+  value = active_patents[1]
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: 'Total citations'
+
+total_citations <- sum(citations$times_cited)
+
+list(
+  icon = 'chat-left-quote',
+  color = 'warning',
+  value = total_citations
+)
+```
+
+## Row {height=75%}
+
+### Column {width=50%}
+
+:::{.panel-tabset}
+
+## Published patents
+
+```{r}
+#| label: published-patents
+
+status %>%
+  select(patent_id, publication_date) %>%
+  mutate(year = year(publication_date)) %>%
+  group_tally(name = "n", year) %>%
+  ggplot() +
+  geom_bar(aes(x = year, y = n), stat = "identity", fill = "#375a7f") +
+  geom_text(aes(x = year, y = n, label = n), vjust = -0.5) +
+  scale_x_continuous(
+    name = "Year",
+    breaks = seq(2014, 2023, 1),
+    labels = seq(2014, 2023, 1)
+  ) +
+  scale_y_continuous(name = NULL) +
+  labs(
+    title = glue("Number of patents by year of publication, {MIN_YEAR} - {MAX_YEAR}"),
+    subtitle = "Patents where at least one assignee is affiliated with the University of Bradford",
+    caption = glue("Source: Dimensions, {DATA_DATE_TEXT}")
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid = element_blank()
+  )
+```
+
+## Fields of Research
+
+```{r}
+#| label: fields-of-research
+
+for_2020_summary <- for_2020 %>%
+  filter(str_length(for_2020_code) == 2) %>%
+  group_tally(name = "count", for_2020_name) %>%
+  mutate(
+    for_2020_name = str_replace(for_2020_name, 
+                                "Agricultural, Veterinary and Food Sciences", 
+                                "Agricultural, Veterinary\nand Food Sciences"),
+    for_2020_name = str_replace(for_2020_name, 
+                                "Biomedical and Clinical Sciences", 
+                                "Biomedical and\nClinical Sciences"),
+    prop = round(count / sum(count), 3),
+    cum_count = rev(cumsum(rev(count))),
+    pos = count / 2 + lead(cum_count, 1),
+    pos = if_else(is.na(pos), count / 2, pos),
+    colour = viridis::mako(length(count)),
+    l = decode_colour(colour, to = "hcl")[, "l"],
+    label_colours = ifelse(l < 55, "white", "black")
+  )
+
+ggplot(data = for_2020_summary, aes(x = 2, y = count, fill = for_2020_name)) +
+  geom_col(colour = "black", linewidth = 0.5) +
+  geom_label_repel(
+    aes(
+      y = pos,
+      label = glue("{for_2020_name}: {percent(prop)}"),
+      fill = for_2020_name
+    ),
+    size = 3.5,
+    nudge_x = 1,
+    colour = for_2020_summary$label_colours,
+    show.legend = FALSE
+  ) +
+  scale_x_discrete(name = "Field of Research") +
+  scale_y_continuous(name = "Frequency") +
+  scale_fill_manual(name = NULL, values = for_2020_summary$colour) +
+  coord_polar(theta = "y", start = 0, direction = -1) +
+  xlim(0.1, 3) +
+  labs(
+    title = glue("Fields of Research (ANZSRC2020) for patent published from {MIN_YEAR} to {MAX_YEAR}"),
+    subtitle = "A patent may be allocated to more than one Field of Research.\n",
+    caption = glue("Source: Dimensions, {DATA_DATE_TEXT}")
+  ) +
+  theme_void() +
+  theme(legend.position = "none")
+
+```
+
+:::
+
+### Column {width=50%}
+
+:::{.panel-tabset}
+## Co-assignees
+
+```{r}
+#| label: data-assignees
+
+number_of_orgs <- assignees %>%
+  group_by(patent_id) %>%
+  summarise(n = n_distinct(id)) %>%
+  group_tally(name = "count", n)
+
+n_uob_only <- number_of_orgs$count[which(number_of_orgs$n == 1)]
+p_uob_only <- round(100 * n_uob_only / sum(number_of_orgs$count), 1)
+```
+
+<!-- </br> -->
+<!-- The University of Bradford is the sole original assignee on `r n_uob_only` (`r p_uob_only`%) of the `r patent_applications` patents published between `r MIN_YEAR` and `r MAX_YEAR`. -->
+
+```{r}
+#| label: co-assignees
+
+assignees %>%
+  distinct(patent_id, name) %>%
+  group_tally(name = "n", name) %>%
+  filter(name != "University of Bradford") %>%
+  arrange(n) %>%
+  mutate(name = as_factor(name)) %>%
+  ggplot() +
+  geom_bar(aes(x = name, y = n), stat = "identity", fill = "#375a7f") +
+  geom_text(aes(x = name, y = n, label = n), hjust = -0.5) +
+  scale_x_discrete(name = NULL) +
+  scale_y_continuous(name = NULL) +
+  coord_flip() +
+  labs(
+    title = glue("Co-assignees of patents published between {MIN_YEAR} and {MAX_YEAR}"),
+    caption = glue("Source: Dimensions, {DATA_DATE_TEXT}")
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    panel.grid = element_blank()
+  )
+```
+
+## Organisation types
+
+```{r}
+#| label: co-assignees-classes
+
+collaborating_org_types <- assignees %>%
+  filter(id != "grid.6268.a") %>%
+  group_tally(name = "n", types) %>%
+  filter(!is.na(types)) %>%
+  ggplot() +
+  geom_bar(aes(x = types, y = n), stat = "identity", fill = "#375a7f") +
+  geom_text(aes(x = types, y = n, label = n), vjust = -0.5) +
+  scale_x_discrete(name = NULL) +
+  scale_y_continuous(name = NULL) +
+  labs(title = glue("Organisation types")) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid = element_blank(),
+    plot.title = element_text(hjust = 0.1)
+  )
+
+collaborating_org_countries <- assignees %>%
+  filter(id != "grid.6268.a") %>%
+  group_tally(name = "n", country_name) %>%
+  filter(!is.na(country_name)) %>%
+  ggplot() +
+  geom_bar(aes(x = country_name, y = n), stat = "identity", fill = "#f39c12") +
+  geom_text(aes(x = country_name, y = n, label = n), vjust = -0.5) +
+  scale_x_discrete(name = NULL) +
+  scale_y_continuous(name = NULL) +
+  labs(title = glue("Countries")) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid = element_blank(),
+    plot.title = element_text(hjust = 0.1)
+  )
+
+fig <- ggarrange(collaborating_org_types,
+  collaborating_org_countries,
+  align = "h",
+  labels = "AUTO",
+  hjust = -0.5
+)
+
+annotate_figure(fig,
+  bottom = text_grob(glue("Source: Dimensions, {DATA_DATE_TEXT}  "),
+    hjust = 1, x = 1, size = 9
+  )
+)
+```
+
+:::
+
+# Data
+
+```{r}
+#| label: patents-table
+
+patents_table <- status %>%
+  select(patent_id, publication_date, legal_status, granted_date, expiration_date) %>%
+  inner_join(., details, by = "patent_id") %>%
+  mutate(legal_status = str_replace_all(legal_status, "N/A", "")) %>%
+  relocate(inventor_names, .after = "publication_date") %>%
+  relocate(title, .after = "inventor_names") %>%
+  clean_names(case = "title")
+
+table_length <- dim(patents_table)[1]
+
+datatable(patents_table,
+  class = "cell-border stripe",
+  extensions = "Buttons",
+  options = list(
+    autoWidth = TRUE,
+    buttons = c("csv"),
+    columnDefs = list(list(width = "120px", targets = c(0))),
+    dom = "l<'sep'>Bf<t>p",
+    lengthMenu = c(10, table_length * 0.25, table_length * 0.5, table_length * 0.75, table_length),
+    pageLength = 10,
+    paging = TRUE
+  ),
+  rownames = FALSE,
+  caption = htmltools::tags$caption(
+    style = "caption-side: top; text-align: left; font-size: 1.2rem;",
+    "Published patent applications with a University of Bradford assignee"
+  )
+)
+```
+

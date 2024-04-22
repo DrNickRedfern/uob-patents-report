@@ -1,0 +1,27 @@
+/*-- scss:rules --*/
+div.datatables {
+    color: #FFF !important;
+    font-size: 0.8rem !important;
+}
+
+table.dataTable tbody td {
+  vertical-align: top;
+}
+
+.dataTables_wrapper .dataTables_length select {
+  background-color: #222 !important;
+}
+
+.quarto-dashboard .bslib-value-box .value-box-title {
+    font-size: clamp(.1em, 7cqw, 3em) !important;
+}
+
+.quarto-dashboard .bslib-value-box .value-box-value {
+    font-size: clamp(.1em, 10cqw, 5em) !important;
+}
+
+.sep {
+    width: 20px;
+    height: 1px;
+    float: left;
+}
