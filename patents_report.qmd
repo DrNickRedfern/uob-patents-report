@@ -4,6 +4,7 @@ date: today
 date-format: "DD MMMM YYYY"
 format: 
   dashboard: 
+    embed-resources: true
     logo: images/rais_logo_white.png
 theme: [darkly, theme.scss]
 execute: 
@@ -66,10 +67,15 @@ This dashboard presents an overview of patents published by researchers at the U
 Data was collected from [Dimensions](https://app.dimensions.ai/discover/publication) on `r DATA_DATE_TEXT`.
 
 ------------------------
+<br>
+
 ::: {.callout-note collapse="true"}
 ## Research metrics
 
-Put some text in here about responsible research metrics
+The University of Bradford is a signatory of the [San Francisco Declaration on Research Assessment](https://sfdora.org/read/) and is committed to the responsible use of research metrics.
+<br>
+<br>
+Read the University's statement on responsible research metrics [here](https://www.bradford.ac.uk/research/strategy-quality/metrics/).
 
 ![](images/Dorabadge1_white_background.png)
 
@@ -80,7 +86,7 @@ Put some text in here about responsible research metrics
 ## Row {height=25%}
 ```{r}
 #| content: valuebox
-#| title: 'Patent filings'
+#| title: 'Published patents'
 
 patent_applications <- n_distinct(status$patent_id)
 
@@ -107,15 +113,20 @@ list(
 
 ```{r}
 #| content: valuebox
-#| title: 'Active patents'
+#| title: 'Co-assignees'
 
-active_patents <- status %>% 
-  filter(legal_status == "Active") %>% dim()
+co_assignees <- assignees %>%
+  filter(!is.na(name)) %>%
+  filter(name != "University of Bradford") %>%
+  summarise(n = n_distinct(name)) %>%
+  select(n) %>%
+  unlist() %>%
+  unname()
 
 list(
-  icon = 'file-arrow-up',
+  icon = 'person-fill-add',
   color = 'info',
-  value = active_patents[1]
+  value = co_assignees
 )
 ```
 
@@ -213,12 +224,12 @@ ggplot(data = for_2020_summary, aes(x = 2, y = count, fill = for_2020_name)) +
   xlim(0.1, 3) +
   labs(
     title = glue("Fields of Research (ANZSRC2020) for patent published from {MIN_YEAR} to {MAX_YEAR}"),
-    subtitle = "A patent may be allocated to more than one Field of Research.\n",
     caption = glue("Source: Dimensions, {DATA_DATE_TEXT}")
   ) +
   theme_void() +
-  theme(legend.position = "none")
-
+  theme(legend.position = "none",
+        plot.caption = element_text(hjust = 1.7),
+        plot.title = element_text(hjust = 1))
 ```
 
 :::
@@ -362,3 +373,15 @@ datatable(patents_table,
 )
 ```
 
+# Glossary
+
+**Assignees**: organisations who own or have owned the rights to a patent.
+
+**Field of Research (FoR2020)**: The [Australian and New Zealand Standard Research Classification 2020](https://www.abs.gov.au/statistics/classifications/australian-and-new-zealand-standard-research-classification-anzsrc/latest-release) is a hierarchical system of classifying areas of research,</br>with major fields of research divided into minor fields. Fields are placed into categories with which they share a common methodology.
+
+**Inventors**: the people who invented the patent.
+
+**Patent status**:</br>
+- *Active*: the patent has been granted and its owner can now enforce or monetise the patent</br>
+- *Pending*: the patent application was submitted to the patent office but no final decision has been made</br>
+- *Inactive*: the patent cannot be enforced or monetised anymore due to being abandoned, withdrawn, non-payment of maintenance fees, revoked, or otherwise re-issued.
