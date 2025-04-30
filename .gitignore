@@ -59,9 +59,13 @@ store/
 
 # ignore dimensions config
 dsl.ini
+.env
 
 # mypy cache
 .mypy_cache
 
 # report folder
 report/
+
+# Positron files
+.vdoc*
